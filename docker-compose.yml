@@ -1,0 +1,40 @@
+# =============================================================================
+#  audio-transcriber — Docker Compose
+#
+#  Transcription only (no diarization):
+#    docker compose run --rm transcribe audio/interview.m4a --chunk
+#
+#  Full pipeline with speaker diarization:
+#    docker compose run --rm diarize audio/interview.m4a --chunk --diarize
+#
+#  See DOCKER.md for the full step-by-step guide.
+# =============================================================================
+
+services:
+  # ── Transcription only (smaller image, no pyannote/torch) ──────────────────
+  transcribe:
+    build:
+      context: .
+      target: base
+    volumes:
+      - ./audio:/app/audio:ro
+      - ./output:/app/output
+      - whisper-cache:/root/.cache
+    env_file:
+      - .env
+
+  # ── Full pipeline: transcription + speaker diarization ─────────────────────
+  diarize:
+    build:
+      context: .
+      target: full
+    volumes:
+      - ./audio:/app/audio:ro
+      - ./output:/app/output
+      - whisper-cache:/root/.cache
+    env_file:
+      - .env
+
+volumes:
+  whisper-cache:
+    name: audio-transcriber-whisper-cache

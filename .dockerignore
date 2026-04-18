@@ -1,0 +1,42 @@
+# Virtual environments
+.venv/
+venv/
+
+# Version control
+.git/
+.gitignore
+
+# Testing & coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Build artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.egg
+*.egg-info/
+audio_transcriber.egg-info/
+dist/
+build/
+
+# Project runtime data (mounted as volumes instead)
+audio/
+output/
+
+# IDE & editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Misc
+.codex
+.env
+*.md
+!transcriber/**
+LICENSE
+scripts/
+docs/
+tests/
