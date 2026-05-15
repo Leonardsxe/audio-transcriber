@@ -42,3 +42,11 @@ def configure_logging(level: str = "INFO") -> None:
     # Silence noisy third-party loggers unless in DEBUG mode.
     if numeric > logging.DEBUG:
         logging.getLogger("faster_whisper").setLevel(logging.WARNING)
+
+    # Suppress known harmless PyTorch warnings from pyannote (std() calculation on short audio chunks)
+    import warnings
+    warnings.filterwarnings(
+        "ignore",
+        message=".*std.*degrees of freedom is <= 0.*",
+        category=UserWarning,
+    )

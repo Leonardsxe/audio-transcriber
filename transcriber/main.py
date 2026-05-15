@@ -105,6 +105,8 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     # ── misc ─────────────────────────────────────────────────────────────────
     parser.add_argument("--batch", action="store_true",
                         help="Transcribe all audio files in the INPUT directory.")
+    parser.add_argument("--skip-existing", action="store_true",
+                        help="Skip files that already have an output file (use with --batch).")
     parser.add_argument("--log-level", default="INFO",
                         choices=["DEBUG", "INFO", "WARNING", "ERROR"])
     return parser
@@ -214,6 +216,9 @@ def _print_diarized(result: object) -> None:
 
 
 def main() -> None:
+    from dotenv import load_dotenv
+    load_dotenv()
+    
     parser = _build_arg_parser()
     args = parser.parse_args()
 
@@ -276,8 +281,9 @@ def main() -> None:
     else:
         service.transcribe_batch(
             audio_files,
-            output_dir=output_dir if exporter else None,
+            output_dir=output_dir if (exporter or diarized_exporter) else None,
             keep_chunks=args.keep_chunks,
+            skip_existing=args.skip_existing,
         )
 
 

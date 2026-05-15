@@ -213,12 +213,20 @@ class TranscriptionService:
         #    completed transcript if diarization failed on a previous run.
         transcript = stage_checkpoint.load_transcript()
         if transcript is None:
-            transcript = self.transcribe_file(audio_path, keep_chunks=keep_chunks)
+            transcript = self.transcribe_file(
+                audio_path,
+                export_to=export_to if self._exporter is not None else None,
+                keep_chunks=keep_chunks
+            )
             stage_checkpoint.save_transcript(transcript)
             logger.info(
                 "Saved transcription stage checkpoint → '%s'",
                 stage_checkpoint.checkpoint_path,
             )
+        elif export_to is not None and self._exporter is not None:
+            # Resumed from checkpoint, so transcribe_file was bypassed.
+            # Export the raw transcript now if requested.
+            self._export(transcript, export_to)
 
         # 2. Diarize the *original* file (pyannote needs the full audio).
         normalizer = self._make_normalizer()
@@ -258,6 +266,7 @@ class TranscriptionService:
         *,
         output_dir: Path | None = None,
         keep_chunks: bool = False,
+        skip_existing: bool = False,
     ) -> list[TranscriptionResult]:
         """
         Transcribe multiple audio files sequentially.
@@ -273,6 +282,8 @@ class TranscriptionService:
             Export destination directory (requires an exporter).
         keep_chunks:
             Preserve temporary chunk WAV files.
+        skip_existing:
+            If True, skip files that already have an output file in output_dir.
 
         Returns
         -------
@@ -282,12 +293,25 @@ class TranscriptionService:
         results: list[TranscriptionResult] = []
 
         for idx, path in enumerate(audio_paths, start=1):
+            export_to = (output_dir / path.stem) if output_dir else None
+
+            if skip_existing and export_to:
+                # Check if ANY of the active exporters would produce an existing file.
+                if self._is_already_processed(export_to):
+                    logger.info("[%d/%d] Skipping '%s' (output already exists)",
+                                idx, len(audio_paths), path.name)
+                    continue
+
             logger.info("[%d/%d] Processing '%s'", idx, len(audio_paths), path.name)
             try:
-                export_to = (output_dir / path.stem) if output_dir else None
-                result = self.transcribe_file(
-                    path, export_to=export_to, keep_chunks=keep_chunks
-                )
+                if self._diarizer is not None:
+                    result = self.transcribe_and_diarize(
+                        path, export_to=export_to, keep_chunks=keep_chunks
+                    )
+                else:
+                    result = self.transcribe_file(
+                        path, export_to=export_to, keep_chunks=keep_chunks
+                    )
                 results.append(result)
             except HaltException as exc:
                 # Deliberate pause — stop the entire batch and preserve checkpoint.
@@ -298,6 +322,44 @@ class TranscriptionService:
 
         logger.info("Batch done — %d/%d succeeded.", len(results), len(audio_paths))
         return results
+
+    def _is_already_processed(self, export_to: Path) -> bool:
+        """
+        Check if all configured exporters have already produced files.
+        Returns True only if EVERY requested output format exists.
+        """
+        # If no exporters are set, we can't be "already processed" in a meaningful way.
+        if not self._exporter and not self._diarized_exporter:
+            return False
+
+        # 1. Check raw transcript exporter (if active)
+        if self._exporter:
+            from transcriber.output.exporters import JsonExporter, PlainTextExporter, SrtExporter
+            ext = ""
+            if isinstance(self._exporter, PlainTextExporter):
+                ext = ".txt"
+            elif isinstance(self._exporter, JsonExporter):
+                ext = ".json"
+            elif isinstance(self._exporter, SrtExporter):
+                ext = ".srt"
+
+            if ext and not export_to.with_suffix(ext).exists():
+                return False
+
+        # 2. Check diarized transcript exporter (if active)
+        if self._diarized_exporter:
+            from transcriber.output.exporters import SpeakerTextExporter, TranscriptJsonExporter
+            ext = ""
+            if isinstance(self._diarized_exporter, TranscriptJsonExporter):
+                ext = ".transcript.json"
+            elif isinstance(self._diarized_exporter, SpeakerTextExporter):
+                ext = ".transcript.txt"
+
+            if ext and not export_to.with_suffix(ext).exists():
+                return False
+
+        # All active exporters have existing files
+        return True
 
     # ── direct (non-chunked) path ─────────────────────────────────────────────
 
