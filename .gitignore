@@ -128,7 +128,7 @@ cython_debug/
 .vscode/
 
 # Project specific
-audio/
-output/
+/audio/
+/output/
 .codex
 .env
